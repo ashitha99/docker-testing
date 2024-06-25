@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package.json and yarn.lock
 COPY package.json yarn.lock ./
 
-# Install Yarn
-RUN npm install -g yarn
+# Install project dependencies using Yarn (skip installation if Yarn is already installed)
+RUN if ! command -v yarn &> /dev/null; then npm install -g yarn; fi
 
 # Install project dependencies using Yarn
 RUN yarn install --immutable
