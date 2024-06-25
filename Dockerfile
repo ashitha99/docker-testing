@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy package.json and yarn.lock
 COPY package.json yarn.lock ./
 
+# Ensure Yarn version is compatible with workspaces
+RUN corepack enable && corepack prepare yarn@4.0.1 --activate
+
 # Install project dependencies using Yarn
 RUN yarn install --immutable
 
