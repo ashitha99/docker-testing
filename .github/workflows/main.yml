@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD for Strapi
 
 on:
   push:
@@ -6,85 +6,66 @@ on:
       - main
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-    - name: Checkout code
+    - name: Check out repository
       uses: actions/checkout@v2
 
     - name: Set up Node.js
-      uses: actions/setup-node@v2
+      uses: actions/setup-node@v3
       with:
-        node-version: '18'  # Use Node.js 18 to match your package.json
+        node-version: '18'
 
-    - name: Enable Corepack
-      run: corepack enable
+    - name: Upgrade npm
+      run: npm install -g npm@latest
 
-    - name: Prepare Yarn
-      run: corepack prepare yarn@4.0.1 --activate
+    - name: Clear npm cache
+      run: npm cache clean --force
 
-    - name: Verify Node.js and Yarn version
-      run: |
-        node -v
-        yarn -v
-
-    - name: Clean Yarn cache
-      run: yarn cache clean
-
-    - name: Install dependencies
-      run: yarn install --immutable
-
-    - name: Run tests
-      run: yarn test
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build Docker image
       run: docker build -t my-strapi-app .
 
-    - name: Login to Docker Hub
-      env:
-        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      run: echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-
     - name: Push Docker image to Docker Hub
       run: docker push my-strapi-app
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          set -e
 
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+          # Update the package list and upgrade packages
+          sudo apt update
+          sudo apt upgrade -y
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
+          # Install Docker if not installed
+          if ! command -v docker &> /dev/null
+          then
+            sudo apt install -y docker.io
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            sudo usermod -aG docker $USER
+          fi
 
-    - name: Terraform Init
-      run: terraform init
+          # Pull the latest Docker image
+          docker pull my-strapi-app
 
-    - name: Terraform Apply
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      run: terraform apply -auto-approve
+          # Stop and remove any existing container named strapi
+          if [ $(docker ps -q -f name=strapi) ]; then
+            docker stop strapi
+            docker rm strapi
+          fi
 
-    - name: Get Instance Public IP
-      id: get_ip
-      run: echo "::set-output name=public_ip::$(terraform output -raw instance_public_ip)"
-
-    - name: Deploy Strapi to EC2
-      env:
-        DOCKER_IMAGE: ashitha1999/strapi:1.0.0
-        EC2_PUBLIC_IP: ${{ steps.get_ip.outputs.public_ip }}
-        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      run: |
-        echo "$SSH_PRIVATE_KEY" > ssh_key
-        chmod 600 ssh_key
-        ssh -o StrictHostKeyChecking=no -i ssh_key ec2-user@${{ steps.get_ip.outputs.public_ip }} << 'EOF'
-          docker pull $DOCKER_IMAGE
-          docker stop strapi || true
-          docker rm strapi || true
-          docker run -d -p 1337:1337 --name strapi $DOCKER_IMAGE
-        EOF
+          # Run the Docker container
+          docker run -d -p 1337:1337 --name strapi my-strapi-app
