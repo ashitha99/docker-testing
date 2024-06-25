@@ -4,7 +4,7 @@ provider "aws" {
 }
 
 resource "aws_key_pair" "deployer" {
-  key_name   = "deployer-key"
+  key_name   = "docker-test"
   public_key = file(var.public_key_path)
 }
 
@@ -36,7 +36,7 @@ resource "aws_security_group" "docker-SG" {
 resource "aws_instance" "docker_instance" {
   ami             = "ami-0cf2b4e024cdb6960" 
   instance_type   = "t2.micro"
-  key_name        = aws_key_pair.deployer.key_name
+  key_name        = aws_key_pair.docker-test
   security_groups = [aws_security_group.docker-SG.name]
 
   user_data = <<-EOF
@@ -51,7 +51,7 @@ resource "aws_instance" "docker_instance" {
             EOF
 
   tags = {
-    Name = "docker-instance"
+    Name = "docker-strapi"
   }
 }
 
