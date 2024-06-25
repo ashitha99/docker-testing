@@ -36,7 +36,7 @@ resource "aws_security_group" "docker-SG" {
 resource "aws_instance" "docker_instance" {
   ami             = "ami-0cf2b4e024cdb6960" 
   instance_type   = "t2.micro"
-  key_name        = aws_key_pair.docker-test
+  key_name        = aws_key_pair.deployer.key_name
   security_groups = [aws_security_group.docker-SG.name]
 
   user_data = <<-EOF
