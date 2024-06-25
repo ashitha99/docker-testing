@@ -16,24 +16,21 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: '18'  # Use a compatible version
+        node-version: '18'  # Use Node.js 18 to match your package.json
 
-    - name: Upgrade npm
-      run: npm install -g npm@latest
+    - name: Install Yarn
+      run: npm install -g yarn
 
-    - name: Verify Node.js and npm version
+    - name: Verify Node.js and Yarn version
       run: |
         node -v
-        npm -v
-
-    - name: Clean npm cache
-      run: npm cache clean --force
+        yarn -v
 
     - name: Install dependencies
-      run: npm install
+      run: yarn install
 
     - name: Run tests
-      run: npm test
+      run: yarn test
 
     - name: Build Docker image
       run: docker build -t my-strapi-app .
