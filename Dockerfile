@@ -1,24 +1,23 @@
-
-# Use the official Node.js 14 image as the base image
+# Use the official Node.js image as the base image
 FROM node:18
 
-# Create and change to the app directory
-WORKDIR /usr/src/app
+# Set the working directory
+WORKDIR /app
 
-# Copy the package.json and package-lock.json files
-COPY package*.json ./
+# Copy package.json and yarn.lock
+COPY package.json yarn.lock ./
 
-# Install dependencies
-RUN npm install
+# Install Yarn
+RUN npm install -g yarn
 
-# Copy the rest of the application code
+# Install project dependencies using Yarn
+RUN yarn install --immutable
+
+# Copy the entire project directory into the container
 COPY . .
 
-# Build the Strapi admin panel
-RUN npm run build
-
-# Expose the port that the Strapi application will run on
+# Expose the port the app runs on
 EXPOSE 1337
 
-# Start the Strapi application
-CMD ["npm", "run", "start"]
+# Define the command to run the app
+CMD ["yarn", "develop"]
