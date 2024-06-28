@@ -1,4 +1,4 @@
-name: CI/CD for Strapi
+name: Terraform CI/CD
 
 on:
   push:
@@ -6,68 +6,26 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  terraform:
+    name: 'Terraform Apply'
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Check out repository
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.0.0
 
-    - name: Enable Corepack
-      run: corepack enable
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform  # Ensure your .tf files are in this directory
 
-    - name: Prepare Yarn
-      run: corepack prepare yarn@4.0.1 --activate
-
-    - name: Verify Node.js and Yarn version
-      run: |
-        node -v
-        yarn -v
-
-    - name: Clean Yarn cache
-      run: yarn cache clean
-
-    - name: Build Docker image
-      run: docker build -t my-strapi-app .
-
-    - name: Push Docker image to Docker Hub
-      run: docker push my-strapi-app
-
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          set -e
-
-          # Update the package list and upgrade packages
-          sudo apt update
-          sudo apt upgrade -y
-
-          # Install Docker if not installed
-          if ! command -v docker &> /dev/null
-          then
-            sudo apt install -y docker.io
-            sudo systemctl start docker
-            sudo systemctl enable docker
-            sudo usermod -aG docker $USER
-          fi
-
-          # Pull the latest Docker image
-          docker pull my-strapi-app
-
-          # Stop and remove any existing container named strapi
-          if [ $(docker ps -q -f name=strapi) ]; then
-            docker stop strapi
-            docker rm strapi
-          fi
-
-          # Run the Docker container
-          docker run -d -p 1337:1337 --name strapi my-strapi-app
+      - name: Terraform Apply
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: terraform apply -auto-approve
+        working-directory: ./terraform  # Ensure your .tf files are in this directory
