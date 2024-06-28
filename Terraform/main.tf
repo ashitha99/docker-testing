@@ -1,65 +1,77 @@
-
 provider "aws" {
-  region = "us-west-2"  # Change to your desired region
+  region = "us-east-1"  # Replace with your preferred region
 }
 
-resource "aws_key_pair" "deployer" {
-  key_name   = "docker-test"
-  public_key = file(var.public_key_path)
-}
-
-resource "aws_security_group" "docker-SG" {
-  name_prefix = "allow_ssh"
+resource "aws_security_group" "terraform_sg" {
+  name        = "terraform_sg"
+  description = "Allow SSH, HTTP, and custom port traffic"
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"]  # Allow SSH from anywhere (not recommended for production)
   }
 
-   ingress {
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Allow HTTP from anywhere
+  }
+
+  ingress {
     from_port   = 1337
     to_port     = 1337
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"]  # Allow custom port 1337 from anywhere
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"]  # Allow all outbound traffic
   }
 }
 
-resource "aws_instance" "docker_instance" {
-  ami             = "ami-0cf2b4e024cdb6960" 
-  instance_type   = "t2.micro"
-  key_name        = aws_key_pair.deployer.key_name
-  security_groups = [aws_security_group.docker-SG.name]
+resource "aws_instance" "strapi-app" {
+  ami                         = "ami-04b70fa74e45c3917"
+  instance_type               = "t2.medium"
+  subnet_id                   = "subnet-044d40eecd44ded84"
+  vpc_security_group_ids      = [aws_security_group.terraform_sg.id]
+  key_name                    = "terraform-test"
+  associate_public_ip_address = true
 
   user_data = <<-EOF
-              #!/bin/bash
-              sudo yum update -y
-              sudo amazon-linux-extras install docker -y
-              sudo service docker start
-              sudo usermod -a -G docker ec2-user
-              sudo chkconfig docker on
-              docker build -t strapi-image .
-              docker run -d -p 1337:1337 strapi-image
-            EOF
+                #!/bin/bash
+                sudo apt update
+                curl -fsSL https://deb.nodesource.com/setup_20.x -o nodesource_setup.sh
+                sudo bash -E nodesource_setup.sh
+                sudo apt update && sudo apt install -y nodejs
+                sudo npm install -g yarn pm2
+                echo -e "skip\n" | npx create-strapi-app simple-strapi --quickstart
+                cd simple-strapi
+                echo "const strapi = require('@strapi/strapi'); strapi().start();" > server.js
+                pm2 start server.js --name strapi
+                pm2 save && pm2 startup
+                EOF
 
   tags = {
-    Name = "docker-strapi"
+    Name = "my_strapi"
   }
 }
 
 output "instance_public_ip" {
-  value = aws_instance.docker_instance.public_ip
+  description = "The public IP address of the EC2 instance"
+  value       = aws_instance.strapi-app.public_ip
 }
 
-variable "public_key_path" {
-  description = "Path to the SSH public key"
-  type        = string
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "5.54.1"
+    }
+  }
 }
